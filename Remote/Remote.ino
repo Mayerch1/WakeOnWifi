@@ -175,10 +175,13 @@ int kill_remote(){
 
 
     http.begin(client, TARGET_ADDR"kill");
+    http.setTimeout(20000);
     http.addHeader("secret", HTTP_SECRET);
     ret = http.GET();
 
     http.end();
+
+    http.setTimeout(TCP_DEFAULT_TIMEOUT); // set value back to default
 
     if(ret == 200){
         /* give pc time to react to request */
@@ -189,8 +192,7 @@ int kill_remote(){
         return 1;
     }
     else{
-        // TODO: replace with t1
-        return ret;
+        return -1;
     }    
 }
 
@@ -348,8 +350,6 @@ void loop() {
                     trans_ping_estab();
                 }
                 else{
-                    Serial.println("kill failed with %d\n", ret);
-                    //TODO: kill returned -11???
                     stm = ST_KILL_ERR;
                     trans_kill_err();
                 }
@@ -445,6 +445,9 @@ void trans_pc_on(){
     ISR_Timer.deleteTimer(timer_white);
     timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
 
+    ISR_Timer.deleteTimer(timer_red);
+    timer_red = ESP8266_ISR_Timer::MAX_TIMERS;
+
     digitalWrite(LED_WHITE, HIGH);
 }
 
@@ -452,6 +455,9 @@ void trans_pc_off(){
 
     ISR_Timer.deleteTimer(timer_white);
     timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+
+    ISR_Timer.deleteTimer(timer_red);
+    timer_red = ESP8266_ISR_Timer::MAX_TIMERS;
 
     digitalWrite(LED_WHITE, LOW);
 }
