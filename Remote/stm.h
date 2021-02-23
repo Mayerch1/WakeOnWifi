@@ -27,7 +27,8 @@
 
 enum States {ST_INIT, ST_WIFI_ESTAB, ST_PING_ERR, ST_PING_ESTAB, \
             ST_PC_ON, ST_PC_OFF, ST_PC_ERR, \
-            ST_KILL_ARMED, ST_START_ARMED};
+            ST_KILL_ARMED, ST_START_ARMED, \
+            ST_KILL_ERR, ST_START_ERR};
 
 
 #endif

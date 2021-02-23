@@ -5,6 +5,7 @@
 #include <ArduinoJson.h>
 
 #include <ESP8266TimerInterrupt.h>
+#include <ESP8266_ISR_Timer.h>
 
 
 #include "stm.h"
@@ -130,8 +131,6 @@ int init_wifi() {
 
 void setup_wifi(){
 
-    char led_state;
-    int restart_delay;
 
     if (init_wifi() == WL_CONNECTED) {
         Serial.print("Connetted to ");
@@ -142,13 +141,9 @@ void setup_wifi(){
         digitalWrite(LED_BLUE, HIGH);
     }
     else {
-        Serial.print("Error connecting to: ");
+        Serial.print(" Error connecting to: ");
         Serial.println(SSID_WiFi);
         Serial.println("Restarting in 10s");
-
-
-        restart_delay = 0;
-        led_state = LOW;
 
         ITimer.attachInterruptInterval(WIFI_FAIL_BLINK * 1000, blink_blue);
         delay(10000);
@@ -159,26 +154,67 @@ void setup_wifi(){
 
 
 
-void kill_remote(){
+int kill_remote(){
 
-  
+    delay(1000);
+    return -1;
+
+    int ret;
+
     ITimer.detachInterrupt();
     ITimer.attachInterruptInterval(KILL_BLINK * 1000, blink_red);  
 
-    // TODO: rest request  
-    delay(3000);
+
+    http.begin(client, TARGET_ADDR"kill");
+    http.addHeader("secret", HTTP_SECRET);
+    ret = http.GET();
+
+    http.end();
+
+    if(ret == 200){
+        /* give pc time to react to request */
+        delay(5000);
+        return 0;
+    }
+    else if(ret == 412){
+        return 1;
+    }
+    else{
+        return -1;
+    }    
 }
 
 
-void start_remote(){
+int start_remote(){
 
-    
+    delay(1000);
+    return -1;
+
+    int ret;
+
     ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(START_BLINK * 1000, blink_yellow);    
+    ITimer.attachInterruptInterval(START_BLINK * 1000, blink_yellow); 
 
-    // TODO: rest request
-    delay(3000);
+
+    http.begin(client, TARGET_ADDR"start");
+    http.addHeader("secret", HTTP_SECRET);
+    ret = http.GET();
+
+    http.end();
+
+    if(ret == 200){
+        /* give pc time to react to request */
+        delay(1500);
+        return 0;
+    }
+    else if(ret == 412){
+        return 1;
+    }
+    else{
+        return -1;
+    } 
 }
+
 
 
 void setup() {
@@ -209,6 +245,7 @@ void setup() {
     stm = ST_WIFI_ESTAB;
 }
 
+
 void loop() {
 
     /* Periodically request the state of the selected remote pc.
@@ -222,6 +259,17 @@ void loop() {
      */
 
     int ret;
+    static int timer_ms = 0;
+
+    /* the machine gets forced to re-fetch every 10 seconds */
+    if(stm != ST_WIFI_ESTAB && stm != ST_PING_ERR &&\
+       stm != ST_KILL_ERR && stm != ST_START_ERR &&\
+        timer_ms > 10000){
+
+        timer_ms = 0;
+        stm = ST_PING_ESTAB;            
+    }
+
 
     switch(stm){
         case ST_WIFI_ESTAB:
@@ -282,9 +330,16 @@ void loop() {
             }
 
             if(cond_trigger_pressed() == 1){
-                kill_remote();
-                stm = ST_PING_ESTAB;
-                trans_ping_estab();
+
+                ret = kill_remote();
+                if(ret == 0 || ret == 1){
+                    stm = ST_PING_ESTAB;
+                    trans_ping_estab();
+                }
+                else{
+                    stm = ST_KILL_ERR;
+                    trans_kill_err();
+                }
             }
         break;
 
@@ -296,9 +351,16 @@ void loop() {
             }
 
             if(cond_trigger_pressed() == 1){
-                start_remote();
-                stm = ST_PING_ESTAB;
-                trans_ping_estab();
+
+                ret = start_remote();
+                if(ret == 0 || ret == 1){
+                    stm = ST_PING_ESTAB;
+                    trans_ping_estab();
+                }
+                else{
+                    stm = ST_START_ERR;
+                    trans_start_err();
+                }
             }
         break;
 
@@ -310,6 +372,7 @@ void loop() {
     }
 
     delay(50);
+    timer_ms += 50;
 }
 
 
@@ -390,6 +453,29 @@ void trans_arm_start(){
 
 
 
+void trans_kill_err(){
+
+    ITimer.detachInterrupt();
+    
+    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
+    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
+    ITimer.attachInterruptInterval(KILL_BLINK * 1000, blink_red);
+    digitalWrite(LED_YELLOW, HIGH);
+}
+
+
+void trans_start_err(){
+
+    ITimer.detachInterrupt();
+    
+    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
+    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
+    ITimer.attachInterruptInterval(START_BLINK * 1000, blink_yellow);
+    digitalWrite(LED_RED, HIGH);
+}
+
+
+
 int cond_ping_test(){
     int ret = 0;
 
@@ -462,7 +548,6 @@ int cond_trigger_pressed(){
 }
 
 
-/* TODO: update pc state when alreay armed */
+
 /* TODO: remote action */
 /* TODO: error on remote action */
-/* TODO: signal unarmed, but ready, state ?, maybe not*/
