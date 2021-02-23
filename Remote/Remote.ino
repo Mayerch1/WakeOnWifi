@@ -17,85 +17,94 @@
 
 
 
-
-
-
 HTTPClient http; 
 WiFiClient client;
 
 ESP8266Timer ITimer;
+ESP8266_ISR_Timer ISR_Timer;
 
 enum States stm;
 
 
+unsigned int timer_yellow = ESP8266_ISR_Timer::MAX_TIMERS;
+unsigned int timer_red = ESP8266_ISR_Timer::MAX_TIMERS;
+unsigned int timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+unsigned int timer_blue = ESP8266_ISR_Timer::MAX_TIMERS;
+unsigned int timer_green = ESP8266_ISR_Timer::MAX_TIMERS;
 
-void flash_yellow(){
 
-    static int duty_cylce = 0;
-    duty_cylce++;
 
-    if(duty_cylce >= 8){
-        duty_cylce = 0;
-        digitalWrite(LED_YELLOW, HIGH);
+void ICACHE_RAM_ATTR timer_handler(){
+    ISR_Timer.run();
+}
+
+
+void ICACHE_RAM_ATTR flash_yellow(){
+    const char duty_limit = 8;
+    static int duty_cycle = 0;
+
+    flash_led(LED_YELLOW, &duty_cycle, duty_limit);
+}
+
+
+void ICACHE_RAM_ATTR flash_red(){
+
+    const char duty_limit = 20;
+    static int duty_cycle = 0;
+
+    flash_led(LED_RED, &duty_cycle, duty_limit);
+}
+
+
+void ICACHE_RAM_ATTR blink_yellow(){
+    static char led_state = LOW;
+
+    blink_led(LED_YELLOW, &led_state);
+}
+
+void ICACHE_RAM_ATTR blink_red(){
+    static char led_state = LOW;
+    
+    blink_led(LED_RED, &led_state);
+}
+
+void ICACHE_RAM_ATTR blink_white(){
+    static char led_state = LOW;
+
+    blink_led(LED_WHITE, &led_state);
+}
+
+
+void ICACHE_RAM_ATTR blink_blue(){
+    static char led_state = LOW;
+
+    blink_led(LED_BLUE, &led_state);
+}
+
+
+void ICACHE_RAM_ATTR blink_green(){
+    static char led_state = LOW;
+
+    blink_led(LED_GREEN, &led_state);
+}
+
+
+
+void flash_led(int pin, int *const duty_cycle, const char duty_limit){
+
+    if(++(*duty_cycle) >= duty_limit){
+        *duty_cycle = 0;
+        digitalWrite(pin, HIGH);
     }
     else{
-        digitalWrite(LED_YELLOW, LOW);
+        digitalWrite(pin, LOW);
     }
-
 }
 
+void blink_led(int pin, char *const state){
 
-void flash_red(){
-
-    static int duty_cylce = 0;
-    duty_cylce++;
-
-    if(duty_cylce >= 20){
-        duty_cylce = 0;
-        digitalWrite(LED_RED, HIGH);
-    }
-    else{
-        digitalWrite(LED_RED, LOW);
-    }
-
-}
-
-
-void blink_yellow(){
-    static char led_state = LOW;
-
-    digitalWrite(LED_YELLOW, led_state);
-    led_state = !led_state;
-}
-
-void blink_red(){
-    static char led_state = LOW;
-
-    digitalWrite(LED_RED, led_state);
-    led_state = !led_state;
-}
-
-void blink_white(){
-    static char led_state = LOW;
-
-    digitalWrite(LED_WHITE, led_state);
-    led_state = !led_state;
-}
-
-
-void blink_blue(){
-    static char led_state = LOW;
-
-    digitalWrite(LED_BLUE, led_state);
-    led_state = !led_state;
-}
-
-
-void blink_green(){
-    static char led_state = LOW;
-
-    digitalWrite(LED_GREEN, led_state);
-    led_state = !led_state;
+    digitalWrite(pin, *state);
+    *state = !(*state);
 }
 
 
@@ -103,9 +112,11 @@ void blink_green(){
 int init_wifi() {
     int retries = 0;
     char led_high = LOW;
+    int timer;
 
     Serial.println("Connecting to WiFi AP..........");
-    ITimer.attachInterruptInterval(WIFI_BLINK * 1000, blink_blue);
+    timer_blue = ISR_Timer.setInterval(WIFI_BLINK, blink_blue);
+
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(SSID_WiFi, PASSWD_WiFi);
@@ -120,7 +131,8 @@ int init_wifi() {
         Serial.print("#");
     }
 
-    ITimer.detachInterrupt();
+    ISR_Timer.deleteTimer(timer);
+    timer_blue = ESP8266_ISR_Timer::MAX_TIMERS;
 
     return WiFi.status(); // return the WiFi connection status
 }
@@ -145,7 +157,7 @@ void setup_wifi(){
         Serial.println(SSID_WiFi);
         Serial.println("Restarting in 10s");
 
-        ITimer.attachInterruptInterval(WIFI_FAIL_BLINK * 1000, blink_blue);
+        ISR_Timer.setInterval(WIFI_FAIL_BLINK, blink_blue);
         delay(10000);
         
         ESP.restart();
@@ -156,13 +168,10 @@ void setup_wifi(){
 
 int kill_remote(){
 
-    delay(1000);
-    return -1;
-
     int ret;
 
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(KILL_BLINK * 1000, blink_red);  
+    ISR_Timer.deleteTimer(timer_red);
+    timer_red = ISR_Timer.setInterval(START_BLINK, blink_red);
 
 
     http.begin(client, TARGET_ADDR"kill");
@@ -180,20 +189,18 @@ int kill_remote(){
         return 1;
     }
     else{
-        return -1;
+        // TODO: replace with t1
+        return ret;
     }    
 }
 
 
 int start_remote(){
 
-    delay(1000);
-    return -1;
-
     int ret;
-
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(START_BLINK * 1000, blink_yellow); 
+     
+    ISR_Timer.deleteTimer(timer_yellow);
+    timer_yellow = ISR_Timer.setInterval(START_BLINK, blink_yellow);
 
 
     http.begin(client, TARGET_ADDR"start");
@@ -240,9 +247,13 @@ void setup() {
     pinMode(SWITCH_TRIGGER, INPUT_PULLUP);
 
 
+    ITimer.attachInterruptInterval(HW_TIM_INTERVAL_MS * 1000, timer_handler);
+
+
     trans_init();
     setup_wifi(); /* does not return or failure */
     stm = ST_WIFI_ESTAB;
+
 }
 
 
@@ -337,6 +348,8 @@ void loop() {
                     trans_ping_estab();
                 }
                 else{
+                    Serial.println("kill failed with %d\n", ret);
+                    //TODO: kill returned -11???
                     stm = ST_KILL_ERR;
                     trans_kill_err();
                 }
@@ -367,6 +380,7 @@ void loop() {
 
         default:
             /* reached unsolved error state */
+            Serial.println("crit error loop");
             delay(1000);
 
     }
@@ -388,43 +402,66 @@ void trans_init(){
 
 void trans_ping_err(){
 
+    ISR_Timer.deleteTimer(timer_green);
+    timer_green = ISR_Timer.setInterval(PING_FAIL_BLINK, blink_green);
+
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+
     /* reset all 'higher' functions */
     digitalWrite(LED_GREEN, LOW);
     digitalWrite(LED_WHITE, LOW);
     digitalWrite(LED_RED, LOW);
     digitalWrite(LED_YELLOW, LOW);
 
-    /* keep led blinking */
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
-    delay(1000); /* delay further pings */
+    delay(2500); /* delay further pings */
 }
 
 void trans_ping_estab(){
-    ITimer.detachInterrupt();
+
+    ISR_Timer.deleteTimer(timer_green);
+    timer_green = ESP8266_ISR_Timer::MAX_TIMERS;
+
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+
+    ISR_Timer.deleteTimer(timer_red);
+    timer_red = ESP8266_ISR_Timer::MAX_TIMERS;
+
+    ISR_Timer.deleteTimer(timer_yellow);
+    timer_yellow = ESP8266_ISR_Timer::MAX_TIMERS;
+    
     digitalWrite(LED_GREEN, HIGH);
+
     digitalWrite(LED_RED, LOW);
     digitalWrite(LED_YELLOW, LOW);
     digitalWrite(LED_WHITE, LOW);
-    Serial.println("ping established");
 }
 
 
 
 void trans_pc_on(){
-    ITimer.detachInterrupt();
+
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+
     digitalWrite(LED_WHITE, HIGH);
 }
 
 void trans_pc_off(){
-    ITimer.detachInterrupt();
+
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
+
     digitalWrite(LED_WHITE, LOW);
 }
 
 
 void trans_pc_err(){
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
+
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ISR_Timer.setInterval(STATUS_BLINK, blink_white);
+    
     digitalWrite(LED_RED, HIGH);
 }
 
@@ -432,45 +469,42 @@ void trans_pc_err(){
 
 void trans_arm_kill(){
 
-    ITimer.detachInterrupt();
-    digitalWrite(LED_YELLOW, LOW);
-    ITimer.attachInterruptInterval(ARMED_KILL * 1000, flash_red);
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
 
-    Serial.println("kill armed");
-
-    
+    timer_red = ISR_Timer.setInterval(ARMED_KILL, flash_red);    
 }
 
 void trans_arm_start(){
 
-    ITimer.detachInterrupt();
-    digitalWrite(LED_RED, LOW);
-    ITimer.attachInterruptInterval(ARMED_START * 1000, flash_yellow);
+    ISR_Timer.deleteTimer(timer_white);
+    timer_white = ESP8266_ISR_Timer::MAX_TIMERS;
 
-    Serial.println("start armed");
 
+    timer_yellow = ISR_Timer.setInterval(ARMED_START, flash_yellow);
 }
 
 
 
 void trans_kill_err(){
 
-    ITimer.detachInterrupt();
+    ISR_Timer.deleteTimer(timer_red);
+
+    timer_white = ISR_Timer.setInterval(STATUS_BLINK, blink_white);
+    timer_red = ISR_Timer.setInterval(KILL_BLINK, blink_red);
     
-    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
-    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
-    ITimer.attachInterruptInterval(KILL_BLINK * 1000, blink_red);
     digitalWrite(LED_YELLOW, HIGH);
 }
 
 
 void trans_start_err(){
 
-    ITimer.detachInterrupt();
+    ISR_Timer.deleteTimer(timer_yellow);
+
+    timer_white = ISR_Timer.setInterval(STATUS_BLINK, blink_white);
+    timer_red = ISR_Timer.setInterval(START_BLINK, blink_yellow);
     
-    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
-    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
-    ITimer.attachInterruptInterval(START_BLINK * 1000, blink_yellow);
+
     digitalWrite(LED_RED, HIGH);
 }
 
@@ -480,8 +514,7 @@ int cond_ping_test(){
     int ret = 0;
 
     /* only blink with green led, no other blink allowed */
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(PING_BLINK * 1000, blink_green);
+    timer_green = ISR_Timer.setInterval(PING_BLINK, blink_green);
 
 
     http.begin(client, TARGET_ADDR"ping");
@@ -508,9 +541,7 @@ int cond_pc_status(){
     const char* status;
     DynamicJsonDocument doc(128);
 
-    // String resp;
-    ITimer.detachInterrupt();
-    ITimer.attachInterruptInterval(STATUS_BLINK * 1000, blink_white);
+    timer_white = ISR_Timer.setInterval(STATUS_BLINK, blink_white);
 
     http.begin(client, TARGET_ADDR"status");
     ret = http.GET();
@@ -547,7 +578,3 @@ int cond_trigger_pressed(){
     return (digitalRead(SWITCH_TRIGGER) == 0);
 }
 
-
-
-/* TODO: remote action */
-/* TODO: error on remote action */

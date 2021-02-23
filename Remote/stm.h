@@ -15,9 +15,14 @@
 #define SWITCH_ARM D1
 #define SWITCH_TRIGGER D2
 
+
+#define HW_TIM_INTERVAL_MS 50
+
 #define WIFI_BLINK 350
 #define WIFI_FAIL_BLINK 150
 #define PING_BLINK 250
+#define PING_FAIL_BLINK 200
+
 #define STATUS_BLINK 200
 #define ARMED_KILL 50
 #define ARMED_START 150
