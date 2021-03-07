@@ -13,6 +13,12 @@
 #define RELAIS_PIN D6
 
 
+const char *WiFiIP      = "10.0.0.31";   	  // WiFi IP of the ESP
+const char *WiFiGW      = "10.0.0.1";    	  // WiFi GW
+const char *WiFiNM      = "255.255.0.0";  	  // WiFi NM
+const char *WiFiDNS     = "10.0.0.1";    	  // WiFi DNS
+
+
 ESP8266WebServer http_rest_server(HTTP_REST_PORT);
 
 const char* headerKeys[] = {"secret"};
@@ -21,9 +27,26 @@ int numberOfHeaders = 1;
 int init_wifi() {
     int retries = 0;
 
+    IPAddress myIP;
+    IPAddress myGW;
+    IPAddress myNM;
+    IPAddress myDNS;
+
+    WiFi.setAutoConnect(true);
+    WiFi.setAutoReconnect(true);
+    WiFi.softAPdisconnect(true);
+
+    myIP.fromString(WiFiIP);
+    myGW.fromString(WiFiGW);
+    myNM.fromString(WiFiNM);
+    myDNS.fromString(WiFiDNS);
+
+    WiFi.config(myIP, myGW, myNM, myDNS);
+    WiFi.mode(WIFI_STA);
+
     Serial.println("Connecting to WiFi AP..........");
 
-    WiFi.mode(WIFI_STA);
+    
     WiFi.begin(SSID_WiFi, PASSWD_WiFi);
     // check the status of WiFi connection to be WL_CONNECTED
     while ((WiFi.status() != WL_CONNECTED) && (retries < MAX_WIFI_INIT_RETRY)) {
@@ -31,6 +54,9 @@ int init_wifi() {
         delay(WIFI_RETRY_DELAY);
         Serial.print("#");
     }
+
+    WiFi.persistent(true);
+
     return WiFi.status(); // return the WiFi connection status
 }
 

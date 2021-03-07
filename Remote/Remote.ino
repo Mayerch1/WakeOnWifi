@@ -16,6 +16,11 @@
 #define MAX_WIFI_INIT_RETRY 50
 
 
+const char *WiFiIP      = "10.0.0.32";   	  // WiFi IP of the ESP
+const char *WiFiGW      = "10.0.0.1";    	  // WiFi GW
+const char *WiFiNM      = "255.255.0.0";  	  // WiFi NM
+const char *WiFiDNS     = "10.0.0.1";    	  // WiFi DNS
+
 
 HTTPClient http; 
 WiFiClient client;
@@ -114,22 +119,37 @@ int init_wifi() {
     char led_high = LOW;
     int timer;
 
-    Serial.println("Connecting to WiFi AP..........");
-    timer_blue = ISR_Timer.setInterval(WIFI_BLINK, blink_blue);
+    IPAddress myIP;
+    IPAddress myGW;
+    IPAddress myNM;
+    IPAddress myDNS;
 
+    WiFi.setAutoConnect (true);
+    WiFi.setAutoReconnect (true);
+    WiFi.softAPdisconnect (true);
 
+    myIP.fromString(WiFiIP);
+    myGW.fromString(WiFiGW);
+    myNM.fromString(WiFiNM);
+    myDNS.fromString(WiFiDNS);
+
+    WiFi.config(myIP, myGW, myNM, myDNS);
     WiFi.mode(WIFI_STA);
+
+    Serial.println("Connecting to WiFi AP..........");
+
+    timer_blue = ISR_Timer.setInterval(WIFI_BLINK, blink_blue);
     WiFi.begin(SSID_WiFi, PASSWD_WiFi);
+
     // check the status of WiFi connection to be WL_CONNECTED
     while ((WiFi.status() != WL_CONNECTED) && (retries < MAX_WIFI_INIT_RETRY)) {
         retries++;
         delay(WIFI_RETRY_DELAY);
 
-        // digitalWrite(LED_BLUE, led_high);
-
-        // led_high = !led_high;
         Serial.print("#");
     }
+
+    WiFi.persistent(true);
 
     ISR_Timer.deleteTimer(timer);
     timer_blue = ESP8266_ISR_Timer::MAX_TIMERS;
