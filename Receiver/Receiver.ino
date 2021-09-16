@@ -34,6 +34,7 @@ int init_wifi() {
 
     WiFi.setAutoConnect(true);
     WiFi.setAutoReconnect(true);
+    WiFi.persistent(true);
     WiFi.softAPdisconnect(true);
 
     myIP.fromString(WiFiIP);
@@ -268,5 +269,15 @@ void setup(void) {
 }
 
 void loop(void) {
+    /*
+    static unsigned long last_millis = 0;
+    unsigned long current_millis;
+    current_millis = millis();
+
+    if(current_millis-last_millis > 1500){
+        last_millis = current_millis;
+    }
+    */
+
     http_rest_server.handleClient();
 }
